@@ -1,0 +1,15 @@
+// Draw two circles with the same center but different radiuses
+function drawDonut(x, y, radius1, radius2) {
+  circle x y radius1;
+  circle x y radius2;
+}
+
+// Draw a vertical line
+function drawVerticalLine(lineX, lineStartY, lineEndY) {
+  line lineX lineStartY lineX lineEndY;
+}
+
+function main() {
+  drawDonut(20, 20, 5, 10);
+  drawVerticalLine(20, 30, 40);
+}

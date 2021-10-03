@@ -1,0 +1,12 @@
+function main(test1, test2) {
+  x = 20;
+  y = 20;
+  radius1 = 10;
+  radius2 = 15;
+  
+  // Draw two circles with the same center
+  // but different radiuses
+  circle x y radius1;
+  circle x y radius2; // Second circle
+                      // with a larger radius
+}

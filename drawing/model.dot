@@ -1,0 +1,52 @@
+
+    digraph textX {
+    fontname = "Bitstream Vera Sans"
+    fontsize = 8
+    node[
+        shape=record,
+        style=filled,
+        fillcolor=aliceblue
+    ]
+    nodesep = 0.3
+    edge[dir=black,arrowtail=empty]
+
+
+139791704802208 -> 139791704802736 [label="functions:0" arrowtail=diamond dir=both]
+139791704802736 -> 139791704828800 [label="args:0" arrowtail=diamond dir=both]
+139791704828800[label="{test1:Argument|}"]
+139791704802736 -> 139791704828848 [label="args:1" arrowtail=diamond dir=both]
+139791704828848[label="{test2:Argument|}"]
+139791704802736 -> 139791704829136 [label="statements:0" arrowtail=diamond dir=both]
+139791704829136[label="{x:Assignment|+value:int=20\l}"]
+139791704802736 -> 139791704829184 [label="statements:1" arrowtail=diamond dir=both]
+139791704829184[label="{y:Assignment|+value:int=20\l}"]
+139791704802736 -> 139791704828320 [label="statements:2" arrowtail=diamond dir=both]
+139791704828320[label="{radius1:Assignment|+value:int=10\l}"]
+139791704802736 -> 139791704828992 [label="statements:3" arrowtail=diamond dir=both]
+139791704828992[label="{radius2:Assignment|+value:int=15\l}"]
+139791704802736 -> 139791704828704 [label="statements:4" arrowtail=diamond dir=both]
+139791704828704 -> 139791704829088 [label="x" arrowtail=diamond dir=both]
+139791704829088 -> 139791704829136 [label="variable" ]
+139791704829088[label="{:Value|+value:int=0\l}"]
+139791704828704 -> 139791704828656 [label="y" arrowtail=diamond dir=both]
+139791704828656 -> 139791704829184 [label="variable" ]
+139791704828656[label="{:Value|+value:int=0\l}"]
+139791704828704 -> 139791704826160 [label="radius" arrowtail=diamond dir=both]
+139791704826160 -> 139791704828320 [label="variable" ]
+139791704826160[label="{:Value|+value:int=0\l}"]
+139791704828704[label="{:Circle|}"]
+139791704802736 -> 139791704828464 [label="statements:5" arrowtail=diamond dir=both]
+139791704828464 -> 139791704492976 [label="x" arrowtail=diamond dir=both]
+139791704492976 -> 139791704829136 [label="variable" ]
+139791704492976[label="{:Value|+value:int=0\l}"]
+139791704828464 -> 139791704492064 [label="y" arrowtail=diamond dir=both]
+139791704492064 -> 139791704829184 [label="variable" ]
+139791704492064[label="{:Value|+value:int=0\l}"]
+139791704828464 -> 139791704491824 [label="radius" arrowtail=diamond dir=both]
+139791704491824 -> 139791704828992 [label="variable" ]
+139791704491824[label="{:Value|+value:int=0\l}"]
+139791704828464[label="{:Circle|}"]
+139791704802736[label="{main:Function|}"]
+139791704802208[label="{:Program|}"]
+
+}

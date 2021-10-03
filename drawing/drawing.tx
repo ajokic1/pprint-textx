@@ -1,0 +1,49 @@
+Program:
+  functions*=Function
+;
+
+Function:
+  'function' name=ID '(' args*=Argument[','] ')' 
+  '{' statements*=Statement '}'
+;
+
+Argument:
+  name=ID
+;
+
+Statement:
+  (Assignment | Shape | FunctionCall) ';'
+;
+
+FunctionCall:
+  name=[Function]'(' args*=Value[','] ')'
+;
+
+Assignment:
+  name=ID '=' value=INT
+;
+
+Shape:
+  Line | Rectangle | Circle
+;
+
+Line:
+  'line' x1=Value y1=Value x2=Value y2=Value
+;
+
+Rectangle:
+  'rectangle' x1=Value y1=Value x2=Value y2=Value
+;
+
+Circle:
+  'circle' x=Value y=Value radius=Value
+;
+
+Value:
+  variable=[Assignment] | variable=[Argument] | value=INT 
+;
+
+Comment:
+  /\/\/.*$/
+;
+
