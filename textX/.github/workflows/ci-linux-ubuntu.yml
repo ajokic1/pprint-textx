@@ -1,10 +1,6 @@
 name: tests
 
-on:
-  push:
-    branches-ignore:
-      - 'gh-pages'
-  pull_request:
+on: ["push", "pull_request"]
 
 jobs:
   build:
@@ -27,7 +23,6 @@ jobs:
       run: |
         cd ..
         git clone --depth=1 --branch=master git://github.com/textX/Arpeggio.git
-        pip uninstall -y Arpeggio
         cd Arpeggio && python setup.py install
         cd ../textX
     - name: Run unit tests

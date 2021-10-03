@@ -16,6 +16,7 @@ from textx.lang import PRIMITIVE_PYTHON_TYPES
 from textx.scoping import Postponed, remove_models_from_repositories, \
     get_included_models
 from textx.scoping.providers import PlainName as DefaultScopeProvider
+from textx.pprint import pprint_parse_tree
 
 if sys.version < '3':
     text = unicode  # noqa
@@ -25,6 +26,9 @@ else:
 __all__ = ['get_children_of_type', 'get_parent_of_type', 'get_model',
            'get_metamodel']
 
+
+def pprint_tree(parse_tree):
+    pprint_parse_tree(parse_tree)
 
 def textx_isinstance(obj, obj_cls):
     """
@@ -288,6 +292,7 @@ def get_model_parser(top_rule, comments_model, **kwargs):
             self.parser_model = Sequence(
                 nodes=[top_rule, EOF()], rule_name='Model', root=True)
             self.comments_model = comments_model
+            self.keep_layout = True
 
             # Stack for metaclass instances
             self._inst_stack = []
@@ -318,7 +323,7 @@ def get_model_parser(top_rule, comments_model, **kwargs):
             the_clone._crossrefs = []
 
             # TODO self.memoization = memoization
-            the_clone.comments = []
+            the_clone.comments = {}
             the_clone.comment_positions = {}
             the_clone.sem_actions = {}
 
@@ -328,12 +333,10 @@ def get_model_parser(top_rule, comments_model, **kwargs):
             try:
                 return self.parser_model.parse(self)
             except NoMatch as e:
-                e.eval_attrs()
-                raise TextXSyntaxError(message=e.message,
-                                       line=e.line,
-                                       col=e.col,
-                                       filename=e.parser.file_name,
-                                       context=e.context,
+                line, col = e.parser.pos_to_linecol(e.position)
+                raise TextXSyntaxError(message=text(e),
+                                       line=line,
+                                       col=col,
                                        expected_rules=e.rules)
 
         def get_model_from_file(self, file_name, encoding, debug,
@@ -517,7 +520,20 @@ def parse_tree_to_objgraph(parser, parse_tree, file_name=None,
 
     def process_node(node):
         line, col = parser.pos_to_linecol(node.position)
+        
+        # DBG
+        # if(parser._inst_stack):
+        #     print('Node: {}, Last on stack: {}'.format(node, type(parser._inst_stack[-1][0])))
+        
         if isinstance(node, Terminal):
+
+            # Add to pprint data
+            if(parser._inst_stack):
+                parser._inst_stack[-1][0]._tx_pprint_data.append(node)
+
+                # DBG
+                # print('Attaching terminal {} to instance of {}'.format(node, type(parser._inst_stack[-1][0])))
+
             from arpeggio import RegExMatch
             if metamodel.use_regexp_group and \
                     isinstance(node.rule, RegExMatch):
@@ -551,10 +567,22 @@ def parse_tree_to_objgraph(parser, parse_tree, file_name=None,
                 # Abstract meta-class should never be instantiated.
                 if len(node) > 1:
                     try:
-                        return process_node(
+                        processed = process_node(
                             next(n for n in node
-                                 if type(n) is not Terminal
-                                 and n.rule._tx_class is not RULE_MATCH))  # noqa
+                                if type(n) is not Terminal
+                                and n.rule._tx_class is not RULE_MATCH))  # noqa
+                        for n in node:
+                            if isinstance(n, Terminal):
+                                # parser._inst_stack[-1][0]._tx_pprint_data.append(n)
+                                processed._tx_pprint_data.append(n)
+                                # DBG
+                                print('Attaching node {} to instance of {}'.format(n, type(processed)))
+                        return processed
+
+                        # return process_node(
+                        #     next(n for n in node
+                        #          if type(n) is not Terminal
+                        #          and n.rule._tx_class is not RULE_MATCH))  # noqa
                     except StopIteration:
                         # All nodes are match rules, do concatenation
                         return ''.join(text(n) for n in node)
@@ -586,6 +614,9 @@ def parse_tree_to_objgraph(parser, parse_tree, file_name=None,
                 # from the constructor
                 inst = mclass.__new__(mclass)
 
+            # DBG
+            # print('Created instance of type {}'.format(type(inst)))
+
             # Initialize object attributes
             parser.metamodel._init_obj_attrs(inst)
 
@@ -594,6 +625,9 @@ def parse_tree_to_objgraph(parser, parse_tree, file_name=None,
 
             inst._tx_position = node.position
             inst._tx_position_end = node.position_end
+
+            # Add print data array to instance
+            inst._tx_pprint_data = []
 
             # Push real obj. and dummy attr obj on the instance stack
             parser._inst_stack.append((inst, obj_attrs))
@@ -613,6 +647,12 @@ def parse_tree_to_objgraph(parser, parse_tree, file_name=None,
             if parser._inst_stack:
                 setattr(obj_attrs, 'parent', parser._inst_stack[-1][0])
 
+                # Add this instance to parent pprint data
+                parser._inst_stack[-1][0]._tx_pprint_data.append(inst)
+
+                # DBG
+                # print('Attaching instance of {} to parent {}'.format(type(inst), type(parser._inst_stack[-1][0])))
+
             # Special case for 'name' attrib. It is used for cross-referencing
             if hasattr(inst, 'name') and inst.name:
                 # Objects of each class are in its own namespace
@@ -627,6 +667,10 @@ def parse_tree_to_objgraph(parser, parse_tree, file_name=None,
                             ' Please see the note in this docs'
                             ' section http://textx.github.io/textX/stable/grammar/#references')  # noqa
                     raise
+
+            # Add parse tree node reference
+            setattr(obj_attrs, 'parse_tree_node', node)
+            # print('Adding parse tree node reference to {}'.format(node.rule_name))
 
             if parser.debug:
                 parser.dprint("LEAVING INSTANCE {}".format(node.rule_name))
@@ -676,7 +720,11 @@ def parse_tree_to_objgraph(parser, parse_tree, file_name=None,
 
             elif op in ['list', 'oneormore', 'zeroormore']:
                 for n in node:
-                    # If the node is separator skip
+                    # If the node is separator attach to pprint data
+                    if n.rule_name == 'sep':
+                        # DBG
+                        # print('Attaching separator to instance {}'.format(type(parser._inst_stack[-1][0])))
+                        parser._inst_stack[-1][0]._tx_pprint_data.append(n)
                     if n.rule_name != 'sep':
                         # Convert node to proper type
                         # Rule links will be resolved later

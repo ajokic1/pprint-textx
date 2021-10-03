@@ -18,6 +18,7 @@ import codecs
 import re
 import bisect
 from arpeggio.utils import isstr
+from arpeggio.layout import get_layout_data
 import types
 
 __version__ = "1.11.0.dev"
@@ -73,11 +74,7 @@ class NoMatch(Exception):
         self.position = position
         self.parser = parser
 
-
-    def eval_attrs(self):
-        """
-        Call this to evaluate `message`, `context`, `line` and `col`. Called by __str__.
-        """
+    def __str__(self):
         def rule_to_exp_str(rule):
             if hasattr(rule, '_exp_str'):
                 # Rule may override expected report string
@@ -91,24 +88,19 @@ class NoMatch(Exception):
                 return rule.name
 
         if not self.rules:
-            self.message = "Not expected input"
+            err_message = "Not expected input"
         else:
             what_is_expected = OrderedDict.fromkeys(
                 ["{}".format(rule_to_exp_str(r)) for r in self.rules])
             what_str = " or ".join(what_is_expected)
-            self.message = "Expected {}".format(what_str)
+            err_message = "Expected {}".format(what_str)
 
-        self.context = self.parser.context(position=self.position)
-        self.line, self.col = self.parser.pos_to_linecol(self.position)
-
-    def __str__(self):
-        self.eval_attrs()
         return "{} at position {}{} => '{}'."\
-            .format(self.message,
+            .format(err_message,
                     "{}:".format(self.parser.file_name)
                     if self.parser.file_name else "",
-                    (self.line, self.col),
-                    self.context)
+                    text(self.parser.pos_to_linecol(self.position)),
+                    self.parser.context(position=self.position))
 
     def __unicode__(self):
         return self.__str__()
@@ -304,6 +296,8 @@ class ParsingExpression(object):
 
         except NoMatch:
             parser.position = c_pos  # Backtracking
+            # parser.whitespaces = '' # Reset whitespaces when backtracking
+            # parser.comment_whitespaces = ''
             # Memoize NoMatch at this position for this rule
             if parser.memoization:
                 self._result_cache[c_pos] = (NOMATCH_MARKER, c_pos)
@@ -747,8 +741,10 @@ class Match(ParsingExpression):
                     while True:
                         # TODO: Consumed whitespaces and comments should be
                         #       attached to the first match ahead.
-                        parser.comments.append(
-                            parser.comments_model.parse(parser))
+                        comment = parser.comments_model.parse(parser)
+                        print('Parsing comment: {}'.format(comment))
+                        parser.comments.update({parser.position: comment})
+                        parser.attach_last_comment = True
                         if parser.skipws:
                             # Whitespace skipping
                             pos = parser.position
@@ -756,6 +752,8 @@ class Match(ParsingExpression):
                             i = parser.input
                             length = len(i)
                             while pos < length and i[pos] in ws:
+                                print('COMM_WS_FOUND: {}'.format(repr(i[pos])))
+                                parser.comment_whitespaces[pos] = i[pos]
                                 pos += 1
                             parser.position = pos
                 except NoMatch:
@@ -774,6 +772,7 @@ class Match(ParsingExpression):
             i = parser.input
             length = len(i)
             while pos < length and i[pos] in ws:
+                parser.whitespaces[pos] = i[pos]
                 pos += 1
             parser.position = pos
 
@@ -857,7 +856,13 @@ class RegExMatch(Match):
                     (matched, c_pos, parser.context(len(matched))))
             parser.position += len(matched)
             if matched:
-                return Terminal(self, c_pos, matched, extra_info=m)
+                layout_before, comments = get_layout_data(parser, self, c_pos)
+                # print('REGEX Creating Terminal {}, comm_ws: {}, ws: {}, pos: {}'.format(matched, repr(comment_whitespaces_before), repr(layout_before), c_pos))
+                
+                terminal = Terminal(self, c_pos, matched, extra_info=m, layout_before=layout_before, comments=comments)
+                if self.rule_name != 'Comment':
+                    parser.last_terminal = terminal
+                return terminal
         else:
             if parser.debug:
                 parser.dprint("-- NoMatch at {}".format(c_pos))
@@ -897,7 +902,13 @@ class StrMatch(Match):
             # If this match is inside sequence than mark for suppression
             suppress = type(parser.last_pexpression) is Sequence
 
-            return Terminal(self, c_pos, self.to_match, suppress=suppress)
+            layout_before, comments = get_layout_data(parser, self, c_pos)
+            # print('STR Creating Terminal {}, comm_ws: {}, ws: {}, pos: {}'.format(self.to_match, repr(comment_whitespaces_before), repr(layout_before), c_pos))
+            
+            terminal = Terminal(self, c_pos, self.to_match, suppress=suppress, layout_before=layout_before, comments=comments)
+            if self.rule_name != 'Comment':
+                parser.last_terminal = terminal
+            return terminal
         else:
             if parser.debug:
                 parser.dprint(
@@ -1056,14 +1067,18 @@ class Terminal(ParseTreeNode):
     """
 
     __slots__ = ['rule', 'rule_name', 'position', 'error', 'comments',
-                 'value', 'suppress', 'extra_info']
+                 'value', 'suppress', 'extra_info', 'layout_before', 'comments']
 
     def __init__(self, rule, position, value, error=False, suppress=False,
-                 extra_info=None):
+                 extra_info=None, layout_before=None, comments=[]):
         super(Terminal, self).__init__(rule, position, error)
         self.value = value
         self.suppress = suppress
         self.extra_info = extra_info
+        self.layout_before = layout_before
+        self.comments = comments
+        # self.comment_whitespaces_before = comment_whitespaces_before
+        # print('aaaaaaaaaaa {} {} {} commWS: {}'.format(self.value, self.comment_before, repr(self.layout_before), repr(self.comment_whitespaces_before)))
 
     @property
     def desc(self):
@@ -1418,7 +1433,7 @@ class Parser(DebugPrinter):
     FIRST_NOT = Not()
 
     def __init__(self, skipws=True, ws=None, reduce_tree=False, autokwd=False,
-                 ignore_case=False, memoization=False, **kwargs):
+                 ignore_case=False, memoization=False, keep_layout=False, **kwargs):
         """
         Args:
             skipws (bool): Should the whitespace skipping be done.  Default is
@@ -1450,9 +1465,13 @@ class Parser(DebugPrinter):
         self.ignore_case = ignore_case
         self.memoization = memoization
         self.comments_model = None
-        self.comments = []
+        self.comments = {}
         self.comment_positions = {}
         self.sem_actions = {}
+        self.whitespaces = {}
+        self.comment_whitespaces = {}
+        self.attach_last_comment = False
+        self.keep_layout = keep_layout
 
         self.parse_tree = None
 
